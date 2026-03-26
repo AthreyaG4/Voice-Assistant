@@ -123,7 +123,7 @@ function lerpPath(idlePts, recordPts, alpha) {
   return d;
 }
 
-export default function VoiceBlob({ onRecordingComplete, message }) {
+export default function VoiceBlob({ onRecordingComplete, message, onSubmit }) {
   const [recording, setRecording] = useState(false);
   const [morphAlpha, setMorphAlpha] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -142,6 +142,7 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
   const recordingRef = useRef(false);
   const audioLevelRef = useRef(0);
   const recordingStartRef = useRef(0);
+  const chunksRef = useRef([]);
 
   const animate = useCallback((now) => {
     if (!startTimeRef.current) startTimeRef.current = now;
@@ -191,6 +192,18 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
     };
   }, [animate]);
 
+  const [value, setValue] = useState("");
+
+  function handleSubmit() {
+    if (!value.trim()) return;
+    onSubmit(value);
+    setValue("");
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") handleSubmit();
+  }
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -211,11 +224,27 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
         requestAnimationFrame(pollLevel);
       };
 
+      chunksRef.current = []; // reset chunks
       mediaRecorderRef.current = new MediaRecorder(stream);
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
       mediaRecorderRef.current.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         audioContextRef.current?.close();
+
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (onRecordingComplete) {
+          onRecordingComplete({
+            duration: Math.round(
+              (Date.now() - recordingStartRef.current) / 1000,
+            ),
+            timestamp: new Date(),
+            audioBlob: blob,
+          });
+        }
       };
 
       mediaRecorderRef.current.start();
@@ -233,14 +262,11 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
   };
 
   const stopRecording = () => {
-    const duration = Math.round(
-      (Date.now() - recordingStartRef.current) / 1000,
-    );
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !== "inactive"
     ) {
-      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stop(); // onstop handles the rest
     }
     recordingRef.current = false;
     audioLevelRef.current = 0;
@@ -249,10 +275,6 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
     setRecording(false);
     setAudioLevel(0);
     setStatus("tap to record");
-
-    if (onRecordingComplete) {
-      onRecordingComplete({ duration, timestamp: new Date() });
-    }
   };
 
   const handleBlobClick = () => {
@@ -367,7 +389,8 @@ export default function VoiceBlob({ onRecordingComplete, message }) {
       <p className="mt-7 font-sans text-[0.9rem] font-normal tracking-[0.12em] lowercase text-[rgba(134,239,172,0.4)] transition-colors duration-[400ms]">
         {status}
       </p>
-      <p className="mt-7 font-sans text-[0.9rem] font-normal tracking-[0.12em] lowercase text-[rgba(134,239,172,0.4)] transition-colors duration-[400ms]">
+
+      <p className="my-7 font-sans text-[0.9rem] font-normal tracking-[0.12em] lowercase text-[rgba(134,239,172,0.4)] transition-colors duration-[400ms] max-w-sm">
         {message}
       </p>
     </div>

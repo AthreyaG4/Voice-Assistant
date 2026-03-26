@@ -5,10 +5,11 @@ import urllib.parse
 import httpx
 import base64
 from models import Auth
+from agent.agent import initialize_agent
 
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 
-SCOPE = "user-read-private user-read-email"
+SCOPE = "user-read-private user-read-email user-modify-playback-state user-read-playback-state"
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/spotify/callback"
 
 
@@ -56,9 +57,21 @@ async def spotify_callback(code: str):
     refresh_token = tokens["refresh_token"]
     expires_in = tokens["expires_in"]
 
-    auth = Auth(
-        access_token=access_token, refresh_token=refresh_token, expires_in=expires_in
-    )
-    await auth.insert()
+    initialize_agent(tokens["access_token"])
+
+    auth = await Auth.find_one()
+
+    if auth:
+        auth.access_token = access_token
+        auth.refresh_token = refresh_token
+        auth.expires_in = expires_in
+        await auth.save()
+    else:
+        auth = Auth(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+        )
+        await auth.insert()
 
     return RedirectResponse("http://127.0.0.1:5173/")

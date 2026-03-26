@@ -1,50 +1,50 @@
-import asyncio
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.adk.tools.mcp_tool import McpToolset
-from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
+from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+from mcp import StdioServerParameters
+from typing import Optional
 
-MCP_SERVER_PATH = "/app/mcp_servers/main.py"
-
-root_agent = Agent(
-    model=LiteLlm(model="gpt-5-mini"),
-    name="root_agent",
-    description="Tells the current time in a specified city.",
-    instruction="You are a helpful assistant that tells the current time in cities.",
-    tools=[
-        McpToolset(
-            connection_params=SseConnectionParams(
-                url="http://time-server:8001/sse",
-            )
-        )
-    ],
-)
+MCP_SERVER_PATH = "/app/mcp-servers/main.py"
 
 session_service = InMemorySessionService()
 
-APP_NAME = "weather_tutorial_app"
+APP_NAME = "spotify_tutorial_app"
 USER_ID = "user_1"
 SESSION_ID = "session_001"
 
 
-async def init_session(
-    app_name: str, user_id: str, session_id: str
-) -> InMemorySessionService:
-    session = await session_service.create_session(
-        app_name=app_name, user_id=user_id, session_id=session_id
+runner: Optional[Runner] = None
+
+
+def initialize_agent(spotify_token: str):
+    global runner
+    agent = Agent(
+        model=LiteLlm(model="gpt-4o-mini"),
+        name="root_agent",
+        description="An agent that interacts with Spotify on behalf of the user.",
+        instruction="""You are a helpful Spotify assistant. You can interact with the user's Spotify account to retrieve information and control playback.\n"""
+        """When the user asks about their profile, playlists, currently playing track, or anything Spotify related, use the available tools to fetch the information and respond in a friendly, conversational way.\n"""
+        """If a tool call fails with SPOTIFY_AUTH_EXPIRED, stop and inform the user that their Spotify session has expired and they need to reconnect.""",
+        tools=[
+            McpToolset(
+                connection_params=StdioConnectionParams(
+                    server_params=StdioServerParameters(
+                        command="uv",
+                        args=[
+                            "run",
+                            "--project",
+                            "/app/mcp-servers",
+                            "fastmcp",
+                            "run",
+                            MCP_SERVER_PATH,
+                        ],
+                        env={"SPOTIFY_TOKEN": spotify_token},
+                    )
+                )
+            )
+        ],
     )
-    print(
-        f"Session created: App='{app_name}', User='{user_id}', Session='{session_id}'"
-    )
-    return session
-
-
-session = asyncio.run(init_session(APP_NAME, USER_ID, SESSION_ID))
-
-runner = Runner(
-    agent=root_agent,
-    app_name=APP_NAME,
-    session_service=session_service,
-)
+    runner = Runner(agent=agent, app_name=APP_NAME, session_service=session_service)

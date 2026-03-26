@@ -1,13 +1,14 @@
-const API_BASE_URL = "http://localhost:8000/api";
+import API_BASE_URL from "./ApiBase";
 
-export async function chat(message) {
+export async function chat(audioBlob) {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "recording.webm");
+
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: formData,
   });
 
-  if (!response.ok) throw new Error("Network response was not ok");
-
-  return response;
+  if (!response.ok) throw new Error("Transcription failed");
+  return await response.json();
 }

@@ -7,15 +7,27 @@ export default function App() {
   const [entries, setEntries] = useState([]);
   const [message, setMessage] = useState("Empty Message");
 
-  const handleRecordingComplete = async ({ duration, timestamp }) => {
+  const handleRecordingComplete = async ({
+    duration,
+    timestamp,
+    audioBlob,
+  }) => {
     setEntries((prev) => [...prev, { id: Date.now(), duration, timestamp }]);
     try {
-      const response = await chat("What's the time in newyork?");
-      const data = await response.json();
-      console.log(data);
+      const data = await chat(audioBlob);
       setMessage(data.message);
     } catch (err) {
-      console.err(err);
+      console.error(err);
+    }
+  };
+
+  const handleSubmit = async (content) => {
+    try {
+      const response = await chat(content);
+      const data = await response.json();
+      setMessage(data.message);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -25,6 +37,7 @@ export default function App() {
         <VoiceBlob
           onRecordingComplete={handleRecordingComplete}
           message={message}
+          onSubmit={handleSubmit}
         />
       </div>
       <HistoryPane entries={entries} />
